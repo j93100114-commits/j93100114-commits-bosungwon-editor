@@ -17,10 +17,13 @@ export default async function handler(req) {
     });
   }
   
-  // 1. API 키들을 가져옵니다.
-  let apiKeys = keysString.split(',').map(key => key.trim());
+  // 1. 키를 배열로 만들 때, 섞이기 전 원래 번호(originalIndex)를 이름표로 딱 붙여줍니다.
+  let apiKeys = keysString.split(',').map((key, index) => ({
+    value: key.trim(),
+    originalIndex: index + 1 // 1번, 2번, 3번...
+  }));
 
-  // 🚀 핵심: 버튼을 누를 때마다 8개의 키 순서를 랜덤으로 섞어줍니다! (골고루 사용하기 위함)
+  // 2. 이름표가 붙은 상태로 순서를 무작위로 섞습니다. (골고루 사용하기 위함)
   apiKeys.sort(() => Math.random() - 0.5);
 
   let originalBody;
@@ -32,8 +35,8 @@ export default async function handler(req) {
 
   let lastError = null;
 
-  // 제미니에게 요청을 보내는 함수
-  const tryModel = async (key, model, isLiteVersion) => {
+  // 제미니에게 요청을 보내는 함수 (keyObject를 통째로 받아서 원래 번호를 기억합니다)
+  const tryModel = async (keyObject, model, isLiteVersion) => {
     let currentBody = JSON.parse(JSON.stringify(originalBody));
 
     // 🎯 3.1 Lite 버전일 때만 맞춤법 위주 특별 지시사항 추가
@@ -44,7 +47,7 @@ export default async function handler(req) {
       } catch (e) {}
     }
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyObject.value}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(currentBody)
@@ -54,7 +57,8 @@ export default async function handler(req) {
 
     if (response.ok) {
       const modeName = isLiteVersion ? `${model} (맞춤법 위주 모드)` : model;
-      data.usedSystemInfo = `🤖 가동 시스템: 랜덤 배정된 키 / ${modeName}`;
+      // 🚀 여기서 섞이기 전 원래 키 번호(originalIndex)를 띄워줍니다!
+      data.usedSystemInfo = `🤖 가동 시스템: ${keyObject.originalIndex}번 키 / ${modeName}`;
       return { success: true, data };
     }
 
