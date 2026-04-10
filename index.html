@@ -1712,7 +1712,8 @@ ${styleRules}
         const roomGroups = {};
         PEOPLE.forEach((p, pIdx) => {
             if(p.records.length === 0 && Object.keys(p.weights).length === 0) return; 
-            if(term && !p.name.includes(term)) return;<br>            if(!roomGroups[p.room]) roomGroups[p.room] = [];
+            if(term && !p.name.includes(term)) return;
+            if(!roomGroups[p.room]) roomGroups[p.room] = [];
             roomGroups[p.room].push({ ...p, orgIdx: pIdx });
         });
 
