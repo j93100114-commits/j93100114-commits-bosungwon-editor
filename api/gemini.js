@@ -17,13 +17,13 @@ export default async function handler(req) {
     });
   }
   
-  // 1. 키를 배열로 만들 때, 섞이기 전 원래 번호(originalIndex)를 이름표로 딱 붙여줍니다.
+  // 1. 키를 배열로 만들 때, 섞이기 전 원래 번호를 이름표로 붙여줍니다.
   let apiKeys = keysString.split(',').map((key, index) => ({
     value: key.trim(),
-    originalIndex: index + 1 // 1번, 2번, 3번...
+    originalIndex: index + 1
   }));
 
-  // 2. 이름표가 붙은 상태로 순서를 무작위로 섞습니다. (골고루 사용하기 위함)
+  // 2. 이름표가 붙은 상태로 순서를 무작위로 섞습니다.
   apiKeys.sort(() => Math.random() - 0.5);
 
   let originalBody;
@@ -35,11 +35,9 @@ export default async function handler(req) {
 
   let lastError = null;
 
-  // 제미니에게 요청을 보내는 함수 (keyObject를 통째로 받아서 원래 번호를 기억합니다)
   const tryModel = async (keyObject, model, isLiteVersion) => {
     let currentBody = JSON.parse(JSON.stringify(originalBody));
 
-    // 🎯 3.1 Lite 버전일 때만 맞춤법 위주 특별 지시사항 추가
     if (isLiteVersion) {
       try {
         const litePrompt = "\n\n[🚨시스템 긴급 지시사항🚨]\n현재 할당량 초과로 경량(Lite) 모델이 배정되었습니다. 무리하게 문맥을 다듬지 말고, 선생님이 작성하신 원본 내용과 어투를 최대한 그대로 유지하면서 '맞춤법'과 '띄어쓰기' 위주로만 안전하게 교정하세요.";
@@ -47,30 +45,41 @@ export default async function handler(req) {
       } catch (e) {}
     }
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyObject.value}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentBody)
-    });
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyObject.value}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentBody)
+      });
 
-    const data = await response.json();
+      let data;
+      try {
+        // 🛡️ 충격 흡수 장치: 구글이 "An error occurred" 같은 이상한 텍스트를 뱉으면 여기서 안전하게 막아냅니다.
+        data = await response.json();
+      } catch (parseError) {
+        return { success: false, retry: true, error: `구글 서버 과부하 (응답 깨짐), 다음으로 이동` };
+      }
 
-    if (response.ok) {
-      const modeName = isLiteVersion ? `${model} (맞춤법 위주 모드)` : model;
-      // 🚀 여기서 섞이기 전 원래 키 번호(originalIndex)를 띄워줍니다!
-      data.usedSystemInfo = `🤖 가동 시스템: ${keyObject.originalIndex}번 키 / ${modeName}`;
-      return { success: true, data };
+      if (response.ok) {
+        const modeName = isLiteVersion ? `${model} (맞춤법 위주 모드)` : model;
+        data.usedSystemInfo = `🤖 가동 시스템: ${keyObject.originalIndex}번 키 / ${modeName}`;
+        return { success: true, data };
+      }
+
+      // 할당량 초과(429) 또는 서버 뻗음(503, 500) 시 재시도
+      if (response.status === 429 || response.status >= 500 || response.status === 400) {
+        return { success: false, retry: true, error: `할당량/서버 지연으로 실패` };
+      }
+
+      return { success: false, retry: false, data, status: response.status };
+
+    } catch (networkError) {
+      return { success: false, retry: true, error: `네트워크 연결 끊김, 다음으로 이동` };
     }
-
-    if (response.status === 429 || response.status === 503 || response.status === 400) {
-      return { success: false, retry: true, error: `할당량/서버 지연으로 실패` };
-    }
-
-    return { success: false, retry: false, data, status: response.status };
   };
 
   // ====================================================================
-  // 🥇 1단계: 무작위로 섞인 키들을 돌면서 고품질 모델(3 프리뷰 -> 2.5 플래시) 사용
+  // 🥇 1단계: 무작위로 섞인 키들을 돌면서 고품질 모델 사용
   // ====================================================================
   const highQualityModels = ['gemini-3-flash-preview', 'gemini-2.5-flash'];
   
@@ -78,30 +87,22 @@ export default async function handler(req) {
     for (let model of highQualityModels) {
       const result = await tryModel(apiKeys[i], model, false);
       
-      if (result.success) {
-        return new Response(JSON.stringify(result.data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      }
-      if (!result.retry) {
-        return new Response(JSON.stringify(result.data), { status: result.status, headers: { 'Content-Type': 'application/json' } });
-      }
+      if (result.success) return new Response(JSON.stringify(result.data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (!result.retry) return new Response(JSON.stringify(result.data), { status: result.status, headers: { 'Content-Type': 'application/json' } });
       lastError = result.error;
     }
   }
 
   // ====================================================================
-  // 🥈 2단계: 위 모델들이 전부 막히면 무작위로 섞인 키들로 3.1 Lite 버전 가동
+  // 🥈 2단계: 위 모델들이 전부 막히면 3.1 Lite 버전 가동
   // ====================================================================
   const fallbackModel = 'gemini-3.1-flash-lite-preview';
   
   for (let i = 0; i < apiKeys.length; i++) {
     const result = await tryModel(apiKeys[i], fallbackModel, true); 
     
-    if (result.success) {
-      return new Response(JSON.stringify(result.data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
-    if (!result.retry) {
-      return new Response(JSON.stringify(result.data), { status: result.status, headers: { 'Content-Type': 'application/json' } });
-    }
+    if (result.success) return new Response(JSON.stringify(result.data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (!result.retry) return new Response(JSON.stringify(result.data), { status: result.status, headers: { 'Content-Type': 'application/json' } });
     lastError = result.error;
   }
 
