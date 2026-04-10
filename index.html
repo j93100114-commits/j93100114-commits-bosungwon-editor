@@ -515,10 +515,7 @@
 
     <div class="btn-container">
         <button id="checkBtn" class="main-btn" style="width: auto;" onclick="processText()">🚀 생활일지 교정 및 핵심 분석 시작</button>
-        <div id="loadingText" class="loader">
-            ⏳ 문맥을 예쁘게 다듬고 분석하는 중입니다... 잠시만 기다려주세요.<br>
-            <span id="apiStatus1" class="api-status"></span>
-        </div>
+        <div id="loadingText" class="loader"></div>
     </div>
 
     <div class="grid middle-grid">
@@ -576,7 +573,7 @@
         <button id="submitBtn" class="main-btn" style="width: auto;" onclick="processConsultation()">✨ 일지 템플릿 변환 및 자동 작성 시작</button>
     </div>
     
-    <div id="loading" class="loader">⏳ 내용을 분석하여 예쁘게 표를 채우고 있습니다. 잠시만 기다려주세요...<br><span id="apiStatus2" class="api-status">현재 대기 중</span></div>
+    <div id="loading" class="loader"></div>
     
     <div class="report-header">
         <h2>✨ 상담 일지 (작성 결과)</h2>
@@ -873,7 +870,6 @@
         
         const btn = document.getElementById('checkBtn');
         const loader = document.getElementById('loadingText');
-        const statusDiv = document.getElementById('apiStatus1');
         
         const docStyle = document.querySelector('input[name="docStyle"]:checked').value;
 
@@ -899,10 +895,13 @@
         }
 
         btn.disabled = true;
-        loader.style.display = 'block';
         outputBox.value = '';
         serviceBox.value = '';
         handoverBox.value = '';
+        
+        // 🚀 버튼 아래 로딩 영역 텍스트 초기화
+        loader.innerHTML = `⏳ 문맥을 예쁘게 다듬고 분석하는 중입니다... 잠시만 기다려주세요.<br><span class="api-status">보안 서버를 통해 안전하게 분석 중입니다...</span>`;
+        loader.style.display = 'block';
         
         let styleRules = "";
         if (docStyle === "regular") {
@@ -956,8 +955,6 @@ ${styleRules}
         let requestSuccessful = false;
         let lastError = "";
 
-        statusDiv.innerText = `보안 서버를 통해 안전하게 분석 중입니다...`;
-
         try {
             const response = await fetch(`/api/gemini`, {
                 method: 'POST',
@@ -1002,6 +999,10 @@ ${styleRules}
                     handoverBox.value = "분석 내역 분리 실패";
                 }
 
+                // 🚀 결과창에 남기지 않고, 로딩 텍스트를 시스템 정보로 예쁘게 변경
+                const systemInfo = data.usedSystemInfo || "시스템 정보 없음";
+                loader.innerHTML = `✨ 분석이 성공적으로 완료되었습니다!<br><span class="api-status" style="color:#20c997; font-weight:bold; margin-top:8px; display:inline-block;">[${systemInfo}]</span>`;
+                
                 requestSuccessful = true;
             } else {
                 const errorData = await response.json();
@@ -1012,14 +1013,13 @@ ${styleRules}
         }
 
         if (!requestSuccessful) {
-            let errorReason = "오류가 나오면 재시도 해주시면 감사하겠습니다. / 지속적인 오류 발생 시 슬기 선생님께 문의 부탁드려요. 선생님의 원활한 업무를 위해 노력하겠습니다. ❤️";
-            alert(`🚨 안내 말씀 드립니다!\n\n[마지막 오류: ${lastError}]\n${errorReason}`);
+            let errorReason = "오류가 나오면 재시도 해주시면 감사하겠습니다. 지속적인 오류 발생 시 슬기 선생님께 문의 부탁드려요.";
+            loader.innerHTML = `🚨 오류가 발생하여 작업을 완료하지 못했습니다.<br><span class="api-status" style="color:#e03131; font-weight:bold; margin-top:8px; display:inline-block;">[마지막 오류: ${lastError}]</span><br><span style="font-size:13px; color:#868e96;">${errorReason}</span>`;
             outputBox.value = "오류가 발생하여 작업을 완료하지 못했습니다.";
         }
 
         btn.disabled = false;
-        loader.style.display = 'none';
-        statusDiv.innerText = "";
+        // loader.style.display = 'none'; // 사라지지 않도록 주석 처리
     }
 
     function sendLogToExcel1(userName) {
@@ -1045,7 +1045,6 @@ ${styleRules}
         const rawText = document.getElementById('rawInput').value.trim();
         const loadingDiv = document.getElementById('loading');
         const btn = document.getElementById('submitBtn');
-        const statusDiv = document.getElementById('apiStatus2');
         const responseMode = document.querySelector('input[name="responseMode"]:checked').value;
 
         if (!userNameInput) {
@@ -1064,11 +1063,14 @@ ${styleRules}
         }
 
         btn.disabled = true;
-        loadingDiv.style.display = 'block';
         
         const fields = ['outTool', 'outTopic', 'outPurpose', 'outOverview', 'outReason', 'outPlace', 'outContent', 'outOpinion', 'outIntervention', 'outResult', 'outRemark', 'outSupervisor', 'outSupervision'];
         fields.forEach(id => document.getElementById(id).value = '');
         
+        // 🚀 버튼 아래 로딩 영역 텍스트 초기화
+        loadingDiv.innerHTML = `⏳ 내용을 분석하여 예쁘게 표를 채우고 있습니다. 잠시만 기다려주세요...<br><span class="api-status">보안 서버로 접속 시도 중...</span>`;
+        loadingDiv.style.display = 'block';
+
         let modeInstruction = "";
         if (responseMode === "direct") {
             modeInstruction = "교사와 이용인이 주고받는 대화 형식을 그대로 유지하세요. 교사의 말은 너무 전문적인 용어로 억지로 바꾸지 말고 원본 대화의 자연스러운 느낌을 최대한 살려 맞춤법만 교정하세요. 이용인의 대답은 절대 유창하게 꾸미지 말고 원본에 나타난 본연의 억양, 어눌함, 짧은 어휘를 철저하게 그대로 유지하세요.";
@@ -1115,8 +1117,6 @@ ${styleRules}
         let requestSuccessful = false;
         let lastError = "";
 
-        statusDiv.innerText = `보안 서버로 접속 시도 중...`;
-
         try {
             const response = await fetch(`/api/gemini`, {
                 method: 'POST',
@@ -1152,9 +1152,11 @@ ${styleRules}
                     document.getElementById('outResult').value = extractData('[상담결과]', '[비고]').replace(/\*\*/g, '');
                     document.getElementById('outRemark').value = extractData('[비고]', null).replace(/\*\*/g, '');
 
-                    statusDiv.innerText = `안전한 서버 연동을 통해 변환 성공! ✨`;
-                    requestSuccessful = true;
+                    // 🚀 결과창에 남기지 않고, 로딩 텍스트를 시스템 정보로 예쁘게 변경
+                    const systemInfo = data.usedSystemInfo || "시스템 정보 없음";
+                    loadingDiv.innerHTML = `✨ 상담 일지 변환이 성공적으로 완료되었습니다!<br><span class="api-status" style="color:#20c997; font-weight:bold; margin-top:8px; display:inline-block;">[${systemInfo}]</span>`;
                     
+                    requestSuccessful = true;
                     sendLogToExcel2(userNameInput);
                 }
             } else {
@@ -1166,12 +1168,11 @@ ${styleRules}
         }
 
         if (!requestSuccessful) {
-            alert("🚨 시스템 지연 안내\n사용자가 많습니다.\n잠시 후 다시 시도해 주세요.");
-            statusDiv.innerText = "서버 연결 실패";
+            loadingDiv.innerHTML = `🚨 오류가 발생하여 작업을 완료하지 못했습니다.<br><span class="api-status" style="color:#e03131; font-weight:bold; margin-top:8px; display:inline-block;">[마지막 오류: ${lastError}]</span>`;
         }
 
         btn.disabled = false;
-        loadingDiv.style.display = 'none';
+        // loadingDiv.style.display = 'none'; // 사라지지 않도록 주석 처리
     }
 
     function sendLogToExcel2(userName) {
@@ -1711,8 +1712,7 @@ ${styleRules}
         const roomGroups = {};
         PEOPLE.forEach((p, pIdx) => {
             if(p.records.length === 0 && Object.keys(p.weights).length === 0) return; 
-            if(term && !p.name.includes(term)) return;
-            if(!roomGroups[p.room]) roomGroups[p.room] = [];
+            if(term && !p.name.includes(term)) return;<br>            if(!roomGroups[p.room]) roomGroups[p.room] = [];
             roomGroups[p.room].push({ ...p, orgIdx: pIdx });
         });
 
